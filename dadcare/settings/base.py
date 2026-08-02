@@ -23,7 +23,6 @@ INSTALLED_APPS = [
     'apps.shop',
     'apps.marketplace',
     'apps.ai_moderation',
-    'apps.super_admin',
 ]
 
 MIDDLEWARE = [
