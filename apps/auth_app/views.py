@@ -212,17 +212,12 @@ def select_business(request):
         }, status=402)
 
     token = create_business_jwt(
-        user=request.global_user,
+    user=membership.global_user,
         tenant=tenant,
         role=membership.role,
         permissions=membership.custom_permissions,
     )
-
-    # Build user object for cookie payload
-    class _UserProxy:
-        id = user_id
-    proxy = _UserProxy()
-
+    
     response = JsonResponse({
         'success': True,
         'business': {
