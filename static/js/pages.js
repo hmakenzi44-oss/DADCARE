@@ -667,7 +667,33 @@ document.addEventListener('page:rendered', ({ detail: { page, params } }) => {
       } catch (e) { Toast.error(e.message); }
     };
   });
-  document.getElementById('btn-create-biz')?.addEventListener('click', () => Router.navigate('create-business'));
+  document.getElementById('btn-create-biz')?.addEventListener('click', async () => {
+  Sheet.show(`
+    <div class="form-group">
+      <label class="form-label">Jina la Biashara</label>
+      <input id="sh-biz-name" type="text" placeholder="Mfano: Duka la Hojey">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mji</label>
+      <input id="sh-biz-city" type="text" placeholder="Dar es Salaam">
+    </div>
+    <div class="form-group">
+      <label class="form-label">WhatsApp</label>
+      <input id="sh-biz-wa" type="tel" placeholder="+255...">
+    </div>
+    <button class="btn btn-primary btn-block" id="sh-create-biz">Unda Biashara</button>
+  `, 'Unda Biashara Mpya');
+  document.getElementById('sh-create-biz')?.addEventListener('click', async () => {
+    const name = document.getElementById('sh-biz-name')?.value.trim();
+    if (!name) { Toast.error('Jina linahitajika'); return; }
+    try {
+      await API.createBusiness({ name, mini_app_slug: 'shop', city: document.getElementById('sh-biz-city')?.value.trim(), whatsapp: document.getElementById('sh-biz-wa')?.value.trim() });
+      Sheet.hide();
+      Toast.success('Biashara imeundwa!');
+      setTimeout(() => Router.navigate('select-business'), 800);
+    } catch(e) { Toast.error(e.message); }
+  });
+});
   document.getElementById('btn-join-biz')?.addEventListener('click', () => {
     const code = prompt(App.t('invite_code'));
     if (code) API.joinBusiness(code.trim()).then(() => Router.navigate('select-business')).catch(e => Toast.error(e.message));
