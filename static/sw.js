@@ -1,8 +1,8 @@
-const CACHE_NAME = 'dadcare-v1';
+const CACHE_NAME = 'dadcare-v2';
 const STATIC_ASSETS = [
   '/',
   '/static/css/main.css',
-  '/static/js/app.js',
+  '/static/js/core.js',
   '/static/manifest.json',
 ];
 
@@ -28,7 +28,20 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(fetch(event.request));
     return;
   }
-  // Static assets — cache first
+  // JS/CSS — network first, fallback to cache
+  if (event.request.url.includes('/static/js/') || event.request.url.includes('/static/css/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(res => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+  // Other static assets — cache first
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))
   );
