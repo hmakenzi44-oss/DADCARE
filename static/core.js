@@ -474,27 +474,35 @@ function renderPagination(total, page, perPage, onPage) {
 }
 
 // ── INIT ───────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-  // Try to get current user/business
+let _appInitDone = false;
+
+window.addEventListener('load', async () => {
+  if (_appInitDone) return;
+  _appInitDone = true;
+
+  const savedLang = localStorage.getItem('dadcare_lang');
+  State.lang = savedLang || 'sw';
+
+  let authed = false;
   try {
     const data = await API.getProfile();
     State.user = data.user;
     State.business = data.active_business;
-    State.lang = data.user?.language || 'sw';
-    if (data.active_business) {
-      State.currency = 'TZS'; // Will be fetched from shop settings
+    if (data.user?.language) {
+      State.lang = data.user.language;
+      localStorage.setItem('dadcare_lang', data.user.language);
     }
+    if (data.active_business) State.currency = 'TZS';
+    authed = true;
   } catch (e) {
-    // Not logged in
+    State.user = null;
+    State.business = null;
   }
 
-  // Check what page to show
+  if (!authed) { Router.go('login'); return; }
+  if (!State.business) { Router.go('businesses'); return; }
+
   const hash = window.location.hash.slice(1) || '';
-  if (!State.user) {
-    Router.go('welcome');
-  } else if (!State.business) {
-    Router.go('businesses');
-  } else {
-    Router.go(hash || 'dashboard');
-  }
+  const valid = ['dashboard','products','sales','customers','suppliers','orders','reports','staff','settings','marketplace','pos'];
+  Router.go(valid.includes(hash) ? hash : 'dashboard');
 });
