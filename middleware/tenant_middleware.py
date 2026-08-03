@@ -16,6 +16,7 @@ class TenantMiddleware:
 
         if active_business and active_business.get('schema'):
             schema = active_business['schema']
+            schema = str(schema).replace("-", "_")
             # Validate schema name format — SECURITY CRITICAL
             if self._is_valid_schema(schema):
                 with connection.cursor() as cursor:
