@@ -329,7 +329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Step 1: Language check first — if no lang set, show language selection
   const savedLang = localStorage.getItem('dadcare_lang');
   if (!savedLang) {
-    Router.go('login');
+    setTimeout(() => Router.go('login'), 0);
     return;
   }
   State.lang = savedLang;
