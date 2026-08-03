@@ -123,9 +123,9 @@ const API = {
     }
     let data = {};
     try { data = await res.json(); } catch (e) {}
+    // FIX: 401 throws error instead of reloading page — prevents routing loop
     if (res.status === 401) {
-      window.location.href = '/';
-      return;
+      throw new Error('Authentication required');
     }
     if (!res.ok) throw new Error(data.error || `Hitilafu ${res.status}`);
     return data;
@@ -220,6 +220,161 @@ const Toast = {
       el.style.transform = 'translateY(-6px)';
       el.style.transition = 'all 0.2s';
       setTimeout(() => el.remove(), 220);
+    }, ms);
+  },
+  success(m) { this.show(m, 'success'); },
+  error(m)   { this.show(m, 'error', 5000); },
+  warning(m) { this.show(m, 'warning'); },
+  info(m)    { this.show(m, 'info'); },
+};
+
+// ── SHEET ─────────────────────────────────────────────────
+const Sheet = {
+  show(title, content, actions = '') {
+    this.hide();
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.id = 'sheet-overlay';
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.id = 'active-sheet';
+    sheet.innerHTML = `
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <span class="sheet-title">${title}</span>
+        <button class="btn btn-ghost btn-sm" onclick="Sheet.hide()">&#x2715;</button>
+      </div>
+      <div class="sheet-body">${content}</div>
+      ${actions ? `<div class="sheet-body border-top" style="padding-top:14px">${actions}</div>` : ''}`;
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+    requestAnimationFrame(() => {
+      overlay.classList.add('show');
+      sheet.classList.add('show');
+    });
+    overlay.onclick = (e) => { if (e.target === overlay) this.hide(); };
+  },
+  hide() {
+    const o = document.getElementById('sheet-overlay');
+    const s = document.getElementById('active-sheet');
+    if (o) { o.classList.remove('show'); setTimeout(() => o.remove(), 280); }
+    if (s) { s.classList.remove('show'); setTimeout(() => s.remove(), 280); }
+  },
+};
+
+// ── CONFIRM DIALOG ─────────────────────────────────────────
+function Confirm(message, title = 'Thibitisha') {
+  return new Promise((resolve) => {
+    Sheet.show(title, `<p style="font-size:14px;color:var(--text-dim)">${message}</p>`,
+      `<div class="flex gap-10">
+        <button class="btn btn-ghost flex-1" onclick="Sheet.hide();window._confirmRes(false)">Ghairi</button>
+        <button class="btn btn-danger flex-1" onclick="Sheet.hide();window._confirmRes(true)">Thibitisha</button>
+      </div>`);
+    window._confirmRes = resolve;
+  });
+}
+
+// ── ROUTER ─────────────────────────────────────────────────
+const Router = {
+  routes: {},
+  current: null,
+
+  register(name, fn) { this.routes[name] = fn; },
+
+  async go(page, params = {}) {
+    const main = document.getElementById('main-content');
+    if (!main) return;
+    main.innerHTML = '<div class="loading-page"><div class="spinner"></div></div>';
+    this.current = page;
+
+    // Update bottom nav active state
+    document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+      el.classList.toggle('active', el.dataset.page === page);
+    });
+
+    const fn = this.routes[page];
+    if (!fn) { main.innerHTML = '<div class="empty"><div class="empty-icon">404</div></div>'; return; }
+    try {
+      const html = await fn(params);
+      main.innerHTML = html || '';
+      window.scrollTo(0, 0);
+      document.dispatchEvent(new CustomEvent('page:ready', {detail: {page, params}}));
+    } catch (e) {
+      Toast.error(e.message);
+      main.innerHTML = `<div class="empty"><div class="empty-text">${e.message}</div></div>`;
+    }
+  },
+};
+
+// ── PAGINATION ─────────────────────────────────────────────
+function renderPagination(total, page, perPage, onPage) {
+  const pages = Math.ceil(total / perPage);
+  if (pages <= 1) return '';
+  let html = `<div class="flex items-center justify-between px-16 py-16" style="font-size:13px">
+    <span class="text-muted">Ukurasa ${page} / ${pages} (${total} jumla)</span>
+    <div class="flex gap-8">`;
+  if (page > 1) html += `<button class="btn btn-ghost btn-sm" onclick="(${onPage})(${page-1})">&#8249; Nyuma</button>`;
+  if (page < pages) html += `<button class="btn btn-primary btn-sm" onclick="(${onPage})(${page+1})">Mbele &#8250;</button>`;
+  return html + '</div></div>';
+}
+
+// ── INIT ───────────────────────────────────────────────────
+// Guard: run once only — prevents re-entry from Router.go loops
+let _appInitDone = false;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (_appInitDone) return;
+  _appInitDone = true;
+
+  // Step 1: Language check first — if no lang set, show language selection
+  const savedLang = localStorage.getItem('dadcare_lang');
+  if (!savedLang) {
+    Router.go('login');
+    return;
+  }
+  State.lang = savedLang;
+
+  // Step 2: Profile check — run ONCE, 401 is expected when not logged in
+  let authed = false;
+  try {
+    const data = await API.getProfile();
+    State.user = data.user;
+    State.business = data.active_business;
+    // User language preference overrides localStorage
+    if (data.user?.language) {
+      State.lang = data.user.language;
+      localStorage.setItem('dadcare_lang', data.user.language);
+    }
+    if (data.active_business) {
+      State.currency = 'TZS'; // fetched from shop settings later
+    }
+    authed = true;
+  } catch (e) {
+    // 401 or network error — not logged in, clear state
+    State.user = null;
+    State.business = null;
+    // Only show network error if it's not an auth error
+    if (e.message !== 'Authentication required') {
+      Toast.warning('Tatizo la mtandao — jaribu tena');
+    }
+  }
+
+  // Step 3: Route ONCE — no further profile calls from here
+  if (!authed) {
+    Router.go('login');
+    return;
+  }
+
+  if (!State.business) {
+    Router.go('businesses');
+    return;
+  }
+
+  const hash = window.location.hash.slice(1) || '';
+  const validPages = ['dashboard','products','sales','customers','suppliers','orders','reports','staff','settings','marketplace','pos'];
+  Router.go(validPages.includes(hash) ? hash : 'dashboard');
+});
+
     }, ms);
   },
   success(m) { this.show(m, 'success'); },
