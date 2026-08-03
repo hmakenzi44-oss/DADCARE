@@ -192,7 +192,7 @@ def select_business(request):
     user_id = request.global_user['id']
 
     try:
-        membership = BusinessMember.objects.select_related('tenant').get(
+        membership = BusinessMember.objects.select_related('tenant', 'global_user').get(
             global_user_id=user_id,
             tenant_id=tenant_id,
             is_active=True,
