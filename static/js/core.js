@@ -123,9 +123,9 @@ const API = {
     }
     let data = {};
     try { data = await res.json(); } catch (e) {}
+    // FIX: 401 throws error instead of reloading page — prevents routing loop
     if (res.status === 401) {
-      window.location.href = '/';
-      return;
+      throw new Error('Authentication required');
     }
     if (!res.ok) throw new Error(data.error || `Hitilafu ${res.status}`);
     return data;
@@ -319,27 +319,58 @@ function renderPagination(total, page, perPage, onPage) {
 }
 
 // ── INIT ───────────────────────────────────────────────────
+// Guard: run once only — prevents re-entry from Router.go loops
+let _appInitDone = false;
+
 document.addEventListener('DOMContentLoaded', async () => {
-  // Try to get current user/business
+  if (_appInitDone) return;
+  _appInitDone = true;
+
+  // Step 1: Language check first — if no lang set, show language selection
+  const savedLang = localStorage.getItem('dadcare_lang');
+  if (!savedLang) {
+    Router.go('language-select');
+    return;
+  }
+  State.lang = savedLang;
+
+  // Step 2: Profile check — run ONCE, 401 is expected when not logged in
+  let authed = false;
   try {
     const data = await API.getProfile();
     State.user = data.user;
     State.business = data.active_business;
-    State.lang = data.user?.language || 'sw';
-    if (data.active_business) {
-      State.currency = 'TZS'; // Will be fetched from shop settings
+    // User language preference overrides localStorage
+    if (data.user?.language) {
+      State.lang = data.user.language;
+      localStorage.setItem('dadcare_lang', data.user.language);
     }
+    if (data.active_business) {
+      State.currency = 'TZS'; // fetched from shop settings later
+    }
+    authed = true;
   } catch (e) {
-    // Not logged in
+    // 401 or network error — not logged in, clear state
+    State.user = null;
+    State.business = null;
+    // Only show network error if it's not an auth error
+    if (e.message !== 'Authentication required') {
+      Toast.warning('Tatizo la mtandao — jaribu tena');
+    }
   }
 
-  // Check what page to show
-  const hash = window.location.hash.slice(1) || '';
-  if (!State.user) {
-    Router.go('welcome');
-  } else if (!State.business) {
-    Router.go('businesses');
-  } else {
-    Router.go(hash || 'dashboard');
+  // Step 3: Route ONCE — no further profile calls from here
+  if (!authed) {
+    Router.go('login');
+    return;
   }
+
+  if (!State.business) {
+    Router.go('businesses');
+    return;
+  }
+
+  const hash = window.location.hash.slice(1) || '';
+  const validPages = ['dashboard','products','sales','customers','suppliers','orders','reports','staff','settings','marketplace','pos'];
+  Router.go(validPages.includes(hash) ? hash : 'dashboard');
 });
