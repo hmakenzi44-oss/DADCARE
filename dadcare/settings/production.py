@@ -1,7 +1,7 @@
 from .base import *
 import os
 
-DEBUG = False
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 # Use DATABASE_URL from environment (Neon.tech format)
 DATABASE_URL = os.environ.get('DATABASE_URL')
